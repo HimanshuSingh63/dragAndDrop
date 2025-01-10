@@ -1,0 +1,34 @@
+<template>
+    <div class="container">
+        <template for:each={sections} for:item="section">
+            <div key={section.id} 
+                 class="section"
+                 draggable="true"
+                 data-section-id={section.id}
+                 ondragstart={handleSectionDragStart}
+                 ondragover={handleSectionDragOver}
+                 ondrop={handleSectionDrop}
+                 ondragend={handleDragEnd}>
+                <div class="section-header">
+                    <div class="section-title">{section.title}</div>
+                </div>
+                <div class="section-content">
+                    <template for:each={section.items} for:item="item">
+                        <div key={item.id}
+                             class="item"
+                             draggable="true"
+                             data-id={item.id}
+                             ondragstart={handleItemDragStart}
+                             ondragover={handleItemDragOver}
+                             ondrop={handleItemDrop}
+                             ondragend={handleDragEnd}>
+                            <div class="item-content">
+                                <lightning-input type={item.type} label={item.label}></lightning-input>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+    </div>
+</template>
