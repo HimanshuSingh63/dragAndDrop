@@ -1,0 +1,226 @@
+import { LightningElement, track } from 'lwc';
+
+export default class SectionReorder extends LightningElement {
+    @track sections = [
+        {
+            id: 'section1',
+            title: 'Section 1',
+            items: [
+                { id: 'item1', label: 'Section 1 - Field 1', type: 'Text' },
+                { id: 'item2', label: 'Section 1 - Field 2', type: 'Number' },
+            ],
+        },
+        {
+            id: 'section2',
+            title: 'Section 2',
+            items: [
+                { id: 'item3', label: 'Section 2 - Field 1', type: 'Checkbox' },
+                { id: 'item4', label: 'Section 2 - Field 2', type: 'Password' },
+            ],
+        },
+    ];
+
+    draggingItem = null;
+    draggingSection = null;
+    dragSourceElement = null;
+
+    constructor() {
+        super();
+        this._handleMouseMove = this.handleMouseMove.bind(this);
+        this._handleMouseUp = this.handleMouseUp.bind(this);
+    }
+
+    connectedCallback() {
+        window.addEventListener('mousemove', this._handleMouseMove);
+        window.addEventListener('mouseup', this._handleMouseUp);
+    }
+
+    disconnectedCallback() {
+        window.removeEventListener('mousemove', this._handleMouseMove);
+        window.removeEventListener('mouseup', this._handleMouseUp);
+    }
+
+    // Section Drag Handlers
+    handleSectionDragStart(event) {
+        const sectionId = event.currentTarget.dataset.sectionId;
+        this.draggingSection = this.sections.find(section => section.id === sectionId);
+        this.dragSourceElement = event.currentTarget;
+        
+        event.currentTarget.style.opacity = '0.4';
+        event.dataTransfer.setData('text/section', sectionId);
+        event.dataTransfer.effectAllowed = 'move';
+
+        // Add dragging class to section
+        event.currentTarget.classList.add('section-dragging');
+    }
+
+    handleSectionDragOver(event) {
+        if (event.preventDefault) {
+            event.preventDefault();
+        }
+
+        const target = event.currentTarget;
+        if (target.classList.contains('section') && !target.classList.contains('section-dragging')) {
+            const boundingRect = target.getBoundingClientRect();
+            const dropPosition = event.clientY < boundingRect.top + boundingRect.height / 2 ? 'before' : 'after';
+            
+            this.template.querySelectorAll('.section-drop-marker').forEach(el => {
+                el.classList.remove('section-drop-marker');
+            });
+            
+            target.classList.add('section-drop-marker');
+            target.dataset.dropPosition = dropPosition;
+        }
+
+        event.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    handleSectionDrop(event) {
+        if (event.stopPropagation) {
+            event.stopPropagation();
+        }
+
+        const draggedSectionId = event.dataTransfer.getData('text/section');
+        if (!draggedSectionId) return; // Not a section drop
+
+        const dropTarget = event.currentTarget;
+        const targetSectionId = dropTarget.dataset.sectionId;
+        
+        if (draggedSectionId !== targetSectionId) {
+            const newSections = [...this.sections];
+            const draggedSectionIndex = newSections.findIndex(section => section.id === draggedSectionId);
+            const targetSectionIndex = newSections.findIndex(section => section.id === targetSectionId);
+            
+            const draggedSection = newSections[draggedSectionIndex];
+            const dropPosition = dropTarget.dataset.dropPosition;
+            
+            // Remove dragged section
+            newSections.splice(draggedSectionIndex, 1);
+            
+            // Insert at new position
+            const newIndex = dropPosition === 'after' ? targetSectionIndex + 1 : targetSectionIndex;
+            newSections.splice(newIndex, 0, draggedSection);
+            
+            this.sections = newSections;
+        }
+        
+        this.cleanupDrag();
+        return false;
+    }
+
+    // Item Drag Handlers
+    handleItemDragStart(event) {
+        event.stopPropagation(); // Prevent section drag from triggering
+        const itemId = event.currentTarget.dataset.id;
+        this.draggingItem = this.findItemById(itemId);
+        this.dragSourceElement = event.currentTarget;
+        
+        event.currentTarget.style.opacity = '0.4';
+        event.dataTransfer.setData('text/item', itemId);
+        event.dataTransfer.effectAllowed = 'move';
+    }
+
+    handleItemDragOver(event) {
+        if (event.preventDefault) {
+            event.preventDefault();
+        }
+        
+        const target = event.currentTarget;
+        if (target.classList.contains('item') && !target.classList.contains('dragging')) {
+            const boundingRect = target.getBoundingClientRect();
+            const dropPosition = event.clientY < boundingRect.top + boundingRect.height / 2 ? 'before' : 'after';
+            
+            this.template.querySelectorAll('.drop-marker').forEach(el => {
+                el.classList.remove('drop-marker');
+            });
+            
+            target.classList.add('drop-marker');
+            target.dataset.dropPosition = dropPosition;
+        }
+
+        event.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    handleItemDrop(event) {
+        event.stopPropagation(); // Prevent section drop from triggering
+        
+        const draggedItemId = event.dataTransfer.getData('text/item');
+        if (!draggedItemId) return; // Not an item drop
+
+        const dropTarget = event.currentTarget;
+        const targetItemId = dropTarget.dataset.id;
+        
+        if (draggedItemId !== targetItemId) {
+            const newSections = JSON.parse(JSON.stringify(this.sections));
+            const sourceSection = this.findSectionContainingItem(draggedItemId);
+            const targetSection = this.findSectionContainingItem(targetItemId);
+            
+            const newSourceSection = newSections.find(section => section.id === sourceSection.id);
+            const newTargetSection = newSections.find(section => section.id === targetSection.id);
+            
+            const draggedItem = this.findItemById(draggedItemId);
+            
+            // Remove from source
+            newSourceSection.items = newSourceSection.items.filter(item => item.id !== draggedItemId);
+            
+            // Find target index
+            const targetIndex = newTargetSection.items.findIndex(item => item.id === targetItemId);
+            const dropPosition = dropTarget.dataset.dropPosition;
+            const insertIndex = dropPosition === 'after' ? targetIndex + 1 : targetIndex;
+            
+            // Insert at new position
+            newTargetSection.items.splice(insertIndex, 0, draggedItem);
+            
+            this.sections = newSections;
+        }
+        
+        this.cleanupDrag();
+        return false;
+    }
+
+    handleDragEnd(event) {
+        this.cleanupDrag();
+    }
+
+    handleMouseMove(event) {
+        // Handle mouse move if needed
+    }
+
+    handleMouseUp(event) {
+        // Handle mouse up if needed
+    }
+
+    cleanupDrag() {
+        if (this.dragSourceElement) {
+            this.dragSourceElement.style.opacity = '1';
+            this.dragSourceElement.classList.remove('section-dragging');
+            this.dragSourceElement = null;
+        }
+        
+        this.template.querySelectorAll('.drop-marker, .section-drop-marker').forEach(el => {
+            el.classList.remove('drop-marker', 'section-drop-marker');
+        });
+        
+        this.draggingItem = null;
+        this.draggingSection = null;
+    }
+
+    findSectionContainingItem(itemId) {
+        return this.sections.find((section) =>
+            section.items.some((item) => item.id === itemId)
+        );
+    }
+
+    findItemById(itemId) {
+        for (const section of this.sections) {
+            for (const item of section.items) {
+                if (item.id === itemId) {
+                    return item;
+                }
+            }
+        }
+        return null;
+    }
+}
